@@ -12,52 +12,23 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-type ProducerOptionsFunc func(*ProducerOptions)
-
-type ProducerOptions struct {
-	name      string
-	maxLen    int64
-	partition int
-}
-
-func WithProducerName(name string) ProducerOptionsFunc {
-	return func(o *ProducerOptions) {
-		o.name = name
-	}
-}
-
-func WithProducerMaxLen(maxLen int64) ProducerOptionsFunc {
-	return func(o *ProducerOptions) {
-		o.maxLen = maxLen
-	}
-}
-
-func WithProducerPartition(partition int) ProducerOptionsFunc {
-	return func(o *ProducerOptions) {
-		o.partition = partition
-	}
-}
-
-func NewProducer(rdb *redis.Client, opts ...ProducerOptionsFunc) *Producer {
-	assert(rdb != nil)
+func NewProducer(config *ProducerConfig) *Producer {
+	assert(config != nil)
 	p := &Producer{
-		rdb:  rdb,
-		opts: &ProducerOptions{},
-	}
-	for _, opt := range opts {
-		opt(p.opts)
+		config: config,
+		rdb:    newClient(config.Address, config.Password),
 	}
 	return p
 }
 
 type Producer struct {
-	rdb  *redis.Client
-	opts *ProducerOptions
+	config *ProducerConfig
+	rdb    *client
 }
 
 func (p *Producer) Publish(topic string, msgs ...string) error {
 	// 通过producer name  hash 值计算消息分区ID
-	partitionId := consistentHashString(p.opts.name, uint32(p.opts.partition))
+	partitionId := consistentHashString(p.config.Name, uint32(p.config.PartitionNum))
 	// 生成流名字
 	stream := buildSteam(topic, partitionId)
 	// 打包多个消息
@@ -70,7 +41,7 @@ func (p *Producer) Publish(topic string, msgs ...string) error {
 		ID:     "*", // redis自动生成消息ID
 		Stream: stream,
 		Values: values,
-		MaxLen: p.opts.maxLen,
+		MaxLen: p.config.MaxLen,
 	}).Result(); err != nil {
 		return err
 	}

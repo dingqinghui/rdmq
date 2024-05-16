@@ -9,31 +9,19 @@
 package rdmq
 
 import (
+	"context"
 	"fmt"
-	"github.com/go-redis/redis/v8"
 	"testing"
 	"time"
 )
 
-var partitionNum = 1
-
 func Test_Consumer(t *testing.T) {
-	var rdbs []*redis.Client
-	for i := 0; i < partitionNum; i++ {
-		rdb := redis.NewClient(&redis.Options{
-			Addr:     "192.168.1.140:6379",
-			Password: "", // no password set
-			DB:       0,  // use default DB
-		})
-		rdbs = append(rdbs, rdb)
+	config := NewConsumerConfig()
+	config.Address = []string{"192.168.1.140:6379"}
+	config.Handler = func(ctx context.Context, msg interface{}) error {
+		fmt.Printf("consumer1 receive message:  %v\n", msg)
+		return nil
 	}
-	NewConsumer(rdbs, "topic1", WithConsumerCount(10),
-		WithConsumerName("consumer1"),
-		WithConsumerGroupName("group3"),
-		WithConsumerPartition(partitionNum),
-		WithConsumerHandler(func(msg interface{}) error {
-			fmt.Printf("consumer1 receive message:  %v\n", msg)
-			return nil
-		}))
+	NewConsumer(context.Background(), "topic2", config)
 	time.Sleep(time.Hour)
 }

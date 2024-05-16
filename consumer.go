@@ -8,95 +8,28 @@
 
 package rdmq
 
-import (
-	"github.com/go-redis/redis/v8"
-)
-
-type ConsumerHandler func(interface{}) error
-
-type ConsumerOptionsFunc func(options *ConsumerOptions)
-
-type ConsumerOptions struct {
-	//
-	// partition
-	// @Description: 分区数量
-	//
-	partition int
-	//
-	// group
-	// @Description: 分组名字
-	//
-	group string
-	//
-	// consumer
-	// @Description: 消费者名字
-	//
-	consumer string
-	//
-	// count
-	// @Description:  每次消费数量
-	//
-	count int64
-	//
-	// handler
-	// @Description:  处理函数
-	//
-	handler ConsumerHandler
-}
-
-func WithConsumerPartition(partition int) ConsumerOptionsFunc {
-	return func(options *ConsumerOptions) {
-		options.partition = partition
-	}
-}
-
-func WithConsumerGroupName(group string) ConsumerOptionsFunc {
-	return func(options *ConsumerOptions) {
-		options.group = group
-	}
-}
-
-func WithConsumerName(consumer string) ConsumerOptionsFunc {
-	return func(options *ConsumerOptions) {
-		options.consumer = consumer
-	}
-}
-
-func WithConsumerCount(count int64) ConsumerOptionsFunc {
-	return func(options *ConsumerOptions) {
-		options.count = count
-	}
-}
-
-func WithConsumerHandler(handler ConsumerHandler) ConsumerOptionsFunc {
-	return func(options *ConsumerOptions) {
-		options.handler = handler
-	}
-}
+import "context"
 
 type Consumer struct {
-	rdbs  []*redis.Client
-	opts  *ConsumerOptions
-	topic string
+	config *ConsumerConfig
+	topic  string
+	rdb    *client
 }
 
-func NewConsumer(rdbs []*redis.Client, topic string, opts ...ConsumerOptionsFunc) *Consumer {
+func NewConsumer(ctx context.Context, topic string, config *ConsumerConfig) *Consumer {
+	assert(config != nil)
 	c := &Consumer{
-		rdbs:  rdbs,
-		topic: topic,
-		opts:  &ConsumerOptions{},
+		config: config,
+		topic:  topic,
+		rdb:    newClient(config.Address, config.Password),
 	}
-	for _, opt := range opts {
-		opt(c.opts)
-	}
-	assert(len(rdbs) == c.opts.partition)
-	c.run()
+	c.run(ctx)
 	return c
 }
 
-func (c *Consumer) run() {
-	for i := 0; i < c.opts.partition; i++ {
-		p := newPartition(c.rdbs[i], c.opts, buildSteam(c.topic, uint32(i)))
-		go p.run()
+func (c *Consumer) run(ctx context.Context) {
+	for i := 0; i < c.config.PartitionNum; i++ {
+		p := newPartition(c.rdb, c.config, buildSteam(c.topic, uint32(i)))
+		go p.run(ctx)
 	}
 }
